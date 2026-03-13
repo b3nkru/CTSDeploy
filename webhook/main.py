@@ -3,7 +3,7 @@ import hmac
 import json
 import os
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 
 from deployer import deploy_project
 
@@ -19,9 +19,15 @@ def verify_signature(payload: bytes, signature: str) -> bool:
     return hmac.compare_digest(expected, signature)
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 @app.post("/webhook")
 async def webhook(
     request: Request,
+    background_tasks: BackgroundTasks,
     x_hub_signature_256: str = Header(None),
     x_github_event: str = Header(None),
 ):
@@ -40,4 +46,5 @@ async def webhook(
     repo_name = data["repository"]["name"]
     branch = data["ref"].replace("refs/heads/", "")
 
-    return deploy_project(repo_name, branch)
+    background_tasks.add_task(deploy_project, repo_name, branch)
+    return {"status": "accepted", "repo": repo_name, "branch": branch}
