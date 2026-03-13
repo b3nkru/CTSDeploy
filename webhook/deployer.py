@@ -6,10 +6,15 @@ import yaml
 from nginx_manager import update_nginx_config
 
 PROJECTS_DIR = os.environ.get("PROJECTS_DIR", "/opt/ctsdeploy/projects")
+SSH_KEY = "/opt/ctsdeploy/.ssh/id_ed25519"
+KNOWN_HOSTS = "/opt/ctsdeploy/.ssh/known_hosts"
+GIT_SSH_COMMAND = f"ssh -i {SSH_KEY} -o UserKnownHostsFile={KNOWN_HOSTS} -o StrictHostKeyChecking=no"
 
 
 def run(cmd: list[str], cwd: str) -> tuple[int, str]:
-    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    env = os.environ.copy()
+    env["GIT_SSH_COMMAND"] = GIT_SSH_COMMAND
+    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=env)
     return result.returncode, result.stdout + result.stderr
 
 
