@@ -9,7 +9,7 @@ SERVICE_USER="ctsdeploy"
 WEBHOOK_PORT=9000
 
 echo "==> Installing system dependencies..."
-apt-get install -y python3-venv python3-pip nginx
+apt-get install -y python3-venv python3-pip nginx certbot python3-certbot-nginx
 
 echo "==> Creating system user '$SERVICE_USER'..."
 if ! id -u "$SERVICE_USER" &>/dev/null; then
@@ -28,6 +28,7 @@ echo "==> Configuring sudoers for '$SERVICE_USER'..."
 cat > /etc/sudoers.d/ctsdeploy <<EOF
 $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/sbin/nginx
 $SERVICE_USER ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/nginx/sites-enabled/*
+$SERVICE_USER ALL=(ALL) NOPASSWD: /usr/bin/certbot
 EOF
 chmod 440 /etc/sudoers.d/ctsdeploy
 
@@ -90,6 +91,7 @@ RestartSec=5
 Environment=PROJECTS_DIR=$INSTALL_DIR/projects
 Environment=NGINX_SITES_DIR=/etc/nginx/sites-enabled
 Environment=DOMAIN=benkruseski.com
+Environment=CERTBOT_EMAIL=rw2dm13@gmail.com
 Environment=WEBHOOK_SECRET=$WEBHOOK_SECRET
 
 [Install]

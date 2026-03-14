@@ -8,6 +8,8 @@ import yaml
 from nginx_manager import update_nginx_config
 
 PROJECTS_DIR = os.environ.get("PROJECTS_DIR", "/opt/ctsdeploy/projects")
+DOMAIN = os.environ.get("DOMAIN", "benkruseski.com")
+CERTBOT_EMAIL = os.environ.get("CERTBOT_EMAIL", "rw2dm13@gmail.com")
 SSH_KEY = "/home/ctsdeploy/.ssh/id_ed25519"
 KNOWN_HOSTS = "/home/ctsdeploy/.ssh/known_hosts"
 GIT_SSH_COMMAND = f"ssh -i {SSH_KEY} -o UserKnownHostsFile={KNOWN_HOSTS} -o StrictHostKeyChecking=no"
@@ -23,21 +25,48 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-def run(cmd: list[str], cwd: str) -> tuple[int, str]:
+def run(cmd: list[str], cwd: str = None) -> tuple[int, str]:
     env = os.environ.copy()
     env["GIT_SSH_COMMAND"] = GIT_SSH_COMMAND
     result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=env)
     return result.returncode, result.stdout + result.stderr
 
 
-def deploy_project(repo_name: str, pushed_branch: str) -> dict:
+def issue_ssl_cert(subdomain: str) -> bool:
+    fqdn = f"{subdomain}.{DOMAIN}"
+    cert_path = Path(f"/etc/letsencrypt/live/{fqdn}")
+    if cert_path.exists():
+        log.info(f"SSL cert already exists for {fqdn} — skipping certbot")
+        return True
+
+    log.info(f"Issuing SSL cert for {fqdn}...")
+    code, out = run([
+        "sudo", "certbot", "--nginx",
+        "-d", fqdn,
+        "--non-interactive",
+        "--agree-tos",
+        "-m", CERTBOT_EMAIL,
+    ])
+    if code != 0:
+        log.error(f"certbot failed for {fqdn}:\n{out}")
+        return False
+
+    log.info(f"SSL cert issued for {fqdn}")
+    return True
+
+
+def deploy_project(repo_name: str, pushed_branch: str, ssh_url: str) -> dict:
     project_dir = os.path.join(PROJECTS_DIR, repo_name)
     log.info(f"Deploy triggered: repo={repo_name} branch={pushed_branch}")
 
+    # Auto-bootstrap: clone repo on first push if not already present
     if not os.path.isdir(project_dir):
-        msg = f"Project directory not found: {project_dir}"
-        log.error(msg)
-        return {"status": "error", "message": msg}
+        log.info(f"Project not found locally — cloning {ssh_url}...")
+        code, out = run(["git", "clone", ssh_url, project_dir])
+        if code != 0:
+            log.error(f"git clone failed:\n{out}")
+            return {"status": "error", "step": "git clone", "output": out}
+        log.info(f"Cloned {repo_name} into {project_dir}")
 
     deploy_yaml_path = os.path.join(project_dir, "deploy.yaml")
     if not os.path.isfile(deploy_yaml_path):
@@ -70,6 +99,7 @@ def deploy_project(repo_name: str, pushed_branch: str) -> dict:
         return {"status": "error", "step": "docker compose", "output": out}
 
     update_nginx_config(project_name, port)
+    issue_ssl_cert(project_name)
 
-    log.info(f"Deploy complete: {project_name}.benkruseski.com")
-    return {"status": "success", "project": project_name, "subdomain": f"{project_name}.benkruseski.com"}
+    log.info(f"Deploy complete: {project_name}.{DOMAIN}")
+    return {"status": "success", "project": project_name, "subdomain": f"{project_name}.{DOMAIN}"}

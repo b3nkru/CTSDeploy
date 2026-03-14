@@ -45,6 +45,7 @@ async def webhook(
     data = json.loads(payload)
     repo_name = data["repository"]["name"]
     branch = data["ref"].replace("refs/heads/", "")
+    ssh_url = data["repository"]["ssh_url"]
 
-    background_tasks.add_task(deploy_project, repo_name, branch)
+    background_tasks.add_task(deploy_project, repo_name, branch, ssh_url)
     return {"status": "accepted", "repo": repo_name, "branch": branch}
