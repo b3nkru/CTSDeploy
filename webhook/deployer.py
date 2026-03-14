@@ -10,8 +10,8 @@ from nginx_manager import update_nginx_config
 PROJECTS_DIR = os.environ.get("PROJECTS_DIR", "/opt/ctsdeploy/projects")
 DOMAIN = os.environ.get("DOMAIN", "benkruseski.com")
 CERTBOT_EMAIL = os.environ.get("CERTBOT_EMAIL", "rw2dm13@gmail.com")
-SSH_KEY = "/home/ctsdeploy/.ssh/id_ed25519"
-KNOWN_HOSTS = "/home/ctsdeploy/.ssh/known_hosts"
+SSH_KEY = "/opt/ctsdeploy/.ssh/id_ed25519"
+KNOWN_HOSTS = "/opt/ctsdeploy/.ssh/known_hosts"
 GIT_SSH_COMMAND = f"ssh -i {SSH_KEY} -o UserKnownHostsFile={KNOWN_HOSTS} -o StrictHostKeyChecking=no"
 
 LOG_DIR = Path("/var/log/ctsdeploy")

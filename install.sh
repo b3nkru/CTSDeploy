@@ -38,31 +38,31 @@ usermod -aG docker "$SERVICE_USER"
 
 # Generate SSH key for pulling private repos
 echo "==> Generating SSH key for GitHub access..."
-mkdir -p /home/$SERVICE_USER/.ssh
-if [ ! -f /home/$SERVICE_USER/.ssh/id_ed25519 ]; then
-    ssh-keygen -t ed25519 -f /home/$SERVICE_USER/.ssh/id_ed25519 -N "" -C "ctsdeploy@$(hostname)"
+mkdir -p $INSTALL_DIR/.ssh
+if [ ! -f $INSTALL_DIR/.ssh/id_ed25519 ]; then
+    ssh-keygen -t ed25519 -f $INSTALL_DIR/.ssh/id_ed25519 -N "" -C "ctsdeploy@$(hostname)"
 fi
-ssh-keyscan github.com >> /home/$SERVICE_USER/.ssh/known_hosts
-cat > /home/$SERVICE_USER/.ssh/config <<EOF
+ssh-keyscan github.com >> $INSTALL_DIR/.ssh/known_hosts
+cat > $INSTALL_DIR/.ssh/config <<EOF
 Host github.com
-    IdentityFile /home/$SERVICE_USER/.ssh/id_ed25519
-    UserKnownHostsFile /home/$SERVICE_USER/.ssh/known_hosts
+    IdentityFile $INSTALL_DIR/.ssh/id_ed25519
+    UserKnownHostsFile $INSTALL_DIR/.ssh/known_hosts
     StrictHostKeyChecking no
 EOF
-chown -R "$SERVICE_USER:$SERVICE_USER" /home/$SERVICE_USER/.ssh
-chmod 700 /home/$SERVICE_USER/.ssh
-chmod 600 /home/$SERVICE_USER/.ssh/id_ed25519
-chmod 644 /home/$SERVICE_USER/.ssh/known_hosts
-chmod 600 /home/$SERVICE_USER/.ssh/config
+chown -R "$SERVICE_USER:$SERVICE_USER" $INSTALL_DIR/.ssh
+chmod 700 $INSTALL_DIR/.ssh
+chmod 600 $INSTALL_DIR/.ssh/id_ed25519
+chmod 644 $INSTALL_DIR/.ssh/known_hosts
+chmod 600 $INSTALL_DIR/.ssh/config
 
 # Update deployer.py to reference correct SSH paths
-sed -i "s|SSH_KEY = .*|SSH_KEY = \"/home/$SERVICE_USER/.ssh/id_ed25519\"|" "$INSTALL_DIR/webhook/deployer.py"
-sed -i "s|KNOWN_HOSTS = .*|KNOWN_HOSTS = \"/home/$SERVICE_USER/.ssh/known_hosts\"|" "$INSTALL_DIR/webhook/deployer.py"
+sed -i "s|SSH_KEY = .*|SSH_KEY = \"$INSTALL_DIR/.ssh/id_ed25519\"|" "$INSTALL_DIR/webhook/deployer.py"
+sed -i "s|KNOWN_HOSTS = .*|KNOWN_HOSTS = \"$INSTALL_DIR/.ssh/known_hosts\"|" "$INSTALL_DIR/webhook/deployer.py"
 
 echo ""
 echo "==> Add this public key as a Deploy Key on each private GitHub repo:"
 echo ""
-cat /home/$SERVICE_USER/.ssh/id_ed25519.pub
+cat $INSTALL_DIR/.ssh/id_ed25519.pub
 echo ""
 read -rp "Press Enter once you've added the deploy key to GitHub..."
 
