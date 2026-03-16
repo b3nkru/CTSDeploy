@@ -1,11 +1,11 @@
 import logging
 import os
 import subprocess
-from pathlib import Path
+from pathlib import Path  # used for LOG_DIR
 
 import yaml
 
-from nginx_manager import update_nginx_config
+from nginx_manager import cert_exists, update_nginx_config
 
 PROJECTS_DIR = os.environ.get("PROJECTS_DIR", "/opt/ctsdeploy/projects")
 DOMAIN = os.environ.get("DOMAIN", "benkruseski.com")
@@ -17,12 +17,13 @@ GIT_SSH_COMMAND = f"ssh -i {SSH_KEY} -o UserKnownHostsFile={KNOWN_HOSTS} -o Stri
 LOG_DIR = Path("/var/log/ctsdeploy")
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-logging.basicConfig(
-    filename=str(LOG_DIR / "deploy.log"),
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-)
-log = logging.getLogger(__name__)
+log = logging.getLogger("ctsdeploy")
+log.setLevel(logging.INFO)
+if not log.handlers:
+    _fh = logging.FileHandler(str(LOG_DIR / "deploy.log"))
+    _fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    log.addHandler(_fh)
+    log.propagate = False
 
 
 def run(cmd: list[str], cwd: str = None) -> tuple[int, str]:
@@ -34,8 +35,7 @@ def run(cmd: list[str], cwd: str = None) -> tuple[int, str]:
 
 def issue_ssl_cert(subdomain: str) -> bool:
     fqdn = f"{subdomain}.{DOMAIN}"
-    cert_path = Path(f"/etc/letsencrypt/live/{fqdn}")
-    if cert_path.exists():
+    if cert_exists(fqdn):
         log.info(f"SSL cert already exists for {fqdn} — skipping certbot")
         return True
 
