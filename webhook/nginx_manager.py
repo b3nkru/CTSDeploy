@@ -63,8 +63,9 @@ def cert_exists(fqdn: str) -> bool:
     try:
         return Path(f"/etc/letsencrypt/live/{fqdn}").exists()
     except PermissionError:
-        # Directory exists but we can't stat it — check for the cert file directly
-        return Path(f"/etc/letsencrypt/live/{fqdn}/fullchain.pem").exists()
+        # Fix #9: previous code re-raised the same PermissionError.
+        # If we can't stat the directory, assume no cert — certbot will create one.
+        return False
 
 
 def update_nginx_config(project_name: str, port: int):
@@ -76,7 +77,15 @@ def update_nginx_config(project_name: str, port: int):
 
     config_path = os.path.join(NGINX_SITES_DIR, f"{project_name}.conf")
 
-    # Write via tee with sudo since sites-enabled is root-owned
+    # Fix #8: read existing config so we can roll back if nginx -t fails
+    backup_config = None
+    backup_proc = subprocess.run(
+        ["sudo", "cat", config_path], capture_output=True, text=True
+    )
+    if backup_proc.returncode == 0:
+        backup_config = backup_proc.stdout
+
+    # Write new config via tee (sites-enabled is root-owned)
     tee = subprocess.run(
         ["sudo", "tee", config_path],
         input=config,
@@ -86,5 +95,48 @@ def update_nginx_config(project_name: str, port: int):
     if tee.returncode != 0:
         raise RuntimeError(f"Failed to write nginx config: {tee.stderr}")
 
-    subprocess.run(["sudo", "/usr/sbin/nginx", "-t"], check=True)
-    subprocess.run(["sudo", "/usr/sbin/nginx", "-s", "reload"], check=True)
+    # Test the new config; roll back and raise on failure
+    test = subprocess.run(
+        ["sudo", "/usr/sbin/nginx", "-t"], capture_output=True, text=True
+    )
+    if test.returncode != 0:
+        # Fix #8 / fix #4: restore previous config (or remove if this was a new file),
+        # and check rollback operation return codes so failures are visible in the error
+        rollback_note = ""
+        if backup_config is not None:
+            rb_tee = subprocess.run(
+                ["sudo", "tee", config_path],
+                input=backup_config,
+                capture_output=True,
+                text=True,
+            )
+            if rb_tee.returncode != 0:
+                rollback_note = f" [ROLLBACK WRITE FAILED: {rb_tee.stderr.strip()}]"
+            else:
+                rb_reload = subprocess.run(
+                    ["sudo", "/usr/sbin/nginx", "-s", "reload"],
+                    capture_output=True,
+                    text=True,
+                )
+                if rb_reload.returncode != 0:
+                    rollback_note = (
+                        f" [ROLLBACK RELOAD FAILED: {rb_reload.stderr.strip()}]"
+                    )
+        else:
+            rb_rm = subprocess.run(
+                ["sudo", "rm", "-f", config_path], capture_output=True, text=True
+            )
+            if rb_rm.returncode != 0:
+                rollback_note = f" [ROLLBACK REMOVE FAILED: {rb_rm.stderr.strip()}]"
+        raise RuntimeError(
+            f"nginx config test failed (rolled back{rollback_note}):\n"
+            f"{test.stdout}{test.stderr}"
+        )
+
+    reload = subprocess.run(
+        ["sudo", "/usr/sbin/nginx", "-s", "reload"], capture_output=True, text=True
+    )
+    if reload.returncode != 0:
+        raise RuntimeError(
+            f"nginx reload failed:\n{reload.stdout}{reload.stderr}"
+        )
